@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Plus, Play, Pause, CheckCircle, XCircle, Clock, Loader2, Calendar, Settings, Flag } from 'lucide-react';
 import { useStore } from '../../stores';
-import { taskApi, ruleApi, sampleApi } from '../../services/api';
-import type { TrialTask, RuleVersion, SampleData } from '../../types';
+import { taskApi, ruleApi, sampleApi, resultCache, recordApi } from '../../services/api';
+import type { TrialTask, RuleVersion, SampleData, TrialRecord } from '../../types';
 import Table from '../../components/common/Table';
 import Button from '../../components/common/Button';
 import StatCard from '../../components/common/StatCard';
@@ -10,7 +10,7 @@ import { clsx } from 'clsx';
 import { useNavigate } from 'react-router-dom';
 
 export default function TrialTask() {
-  const { tasks, setTasks, rules, setRules, samples, setSamples } = useStore();
+  const { tasks, setTasks, rules, setRules, samples, setSamples, setPrefillReport } = useStore();
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const navigate = useNavigate();
@@ -72,8 +72,21 @@ export default function TrialTask() {
 
   const handleExecuteTask = async (taskId: string) => {
     try {
-      await taskApi.executeTask(taskId);
+      const result = await taskApi.executeTask(taskId);
       await loadData();
+
+      // Add to history records
+      if (result.task) {
+        const record: TrialRecord = {
+          id: `record_${Date.now()}`,
+          taskId: result.task.id,
+          taskSnapshot: result.task,
+          fullChain: resultCache[result.task.id],
+          isArchived: false,
+          createdAt: new Date().toISOString()
+        };
+        recordApi.addRecord(record);
+      }
     } catch (err) {
       console.error('执行任务失败', err);
     }
@@ -151,7 +164,18 @@ export default function TrialTask() {
                 size="sm"
                 variant="ghost"
                 icon={<Flag className="w-4 h-4" />}
-                onClick={() => navigate(`/reports?taskId=${task.id}`)}
+                onClick={() => {
+                  // Pre-fill with task info
+                  setPrefillReport({
+                    taskId: task.id,
+                    passRate: 0, // Will be loaded when creating report
+                    hitCount: 0,
+                    missCount: 0,
+                    suspiciousCount: 0,
+                    suspiciousRemarks: []
+                  });
+                  navigate('/reports?action=create');
+                }}
               >
                 生成报告
               </Button>

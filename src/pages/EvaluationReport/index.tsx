@@ -41,13 +41,23 @@ export default function EvaluationReport() {
 
   useEffect(() => {
     loadData();
+  }, []);
 
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('action') === 'create' && prefillReport) {
       setShowCreateModal(true);
       window.history.replaceState({}, '', '/reports');
     }
-  }, [prefillReport]);
+  }, [prefillReport, showCreateModal]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('taskId') && params.get('action') === 'create') {
+      setShowCreateModal(true);
+      window.history.replaceState({}, '', '/reports');
+    }
+  }, []);
 
   const handleViewDetail = async (report: EvaluationReport) => {
     setSelectedReport(report);

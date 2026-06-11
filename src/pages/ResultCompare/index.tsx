@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2,
   XCircle,
@@ -43,9 +43,11 @@ import {
 export default function ResultCompare() {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
-  const { currentResult, setCurrentResult, comparisonData, setComparisonData, anomalyMarks, addAnomalyMark, removeAnomalyMark } = useStore();
+  const [searchParams] = useSearchParams();
+  const { currentResult, setCurrentResult, comparisonData, setComparisonData, anomalyMarks, addAnomalyMark, removeAnomalyMark, setPrefillReport } = useStore();
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'hit' | 'miss' | 'suspicious' | 'chain' | 'compare'>('hit');
+  const tabParam = searchParams.get('tab') as 'hit' | 'miss' | 'suspicious' | 'chain' | 'compare' | null;
+  const [activeTab, setActiveTab] = useState<'hit' | 'miss' | 'suspicious' | 'chain' | 'compare'>(tabParam || 'hit');
   const [groupDimension, setGroupDimension] = useState<'group' | 'channel' | 'timeRange'>('group');
   const [showMarkModal, setShowMarkModal] = useState(false);
   const [selectedSample, setSelectedSample] = useState<string | null>(null);
@@ -57,6 +59,12 @@ export default function ResultCompare() {
       loadResults();
     }
   }, [taskId]);
+
+  useEffect(() => {
+    if (tabParam && ['hit', 'miss', 'suspicious', 'chain', 'compare'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
 
   const loadResults = async () => {
     try {
@@ -88,6 +96,7 @@ export default function ResultCompare() {
     const mark: AnomalyMark = {
       id: `mark_${Date.now()}`,
       resultId: currentResult?.id || '',
+      taskId: taskId || '',
       sampleId: selectedSample,
       anomalyType: 'suspicious',
       remark: markRemark,
@@ -140,17 +149,20 @@ export default function ResultCompare() {
   };
 
   const getMarkForSample = (sampleId: string) => {
-    return anomalyMarks.find(m => m.sampleId === sampleId);
+    return anomalyMarks.find(m => m.sampleId === sampleId && m.taskId === taskId);
   };
 
   const suspiciousCount = anomalyMarks.length;
 
-  // Filter suspicious samples for current task
+  // Filter suspicious samples for current task by taskId
   const getCurrentTaskSuspiciousMarks = () => {
-    const currentResultId = currentResult?.id;
-    if (!currentResultId) return [];
+    if (!taskId) return [];
 
     return anomalyMarks.filter(mark => {
+      // Only include marks for this specific task
+      if (mark.taskId !== taskId) return false;
+
+      // Also verify the sample exists in current result
       const hitSample = currentResult?.hitDetails.find(h => h.sampleId === mark.sampleId);
       const missSample = currentResult?.missDetails.find(m => m.sampleId === mark.sampleId);
       return hitSample || missSample;

@@ -116,6 +116,7 @@ export interface RuleChainNode {
 export interface AnomalyMark {
   id: string;
   resultId: string;
+  taskId: string;
   sampleId: string;
   anomalyType: 'suspicious' | 'error' | 'unusual' | 'flagged';
   remark: string;
@@ -131,6 +132,7 @@ export interface EvaluationReport {
   isApproved: boolean;
   createdAt: string;
   submittedAt?: string;
+  rejectReason?: string;
 }
 
 export interface TrialRecord {

@@ -25,7 +25,8 @@ let taskList = [...mockTasks];
 let testSetList = [...mockTestSets];
 let reportList = [...mockReports];
 let sampleList = [...mockSamples];
-let resultCache: Record<string, TrialResult> = { ...mockResults };
+export let resultCache: Record<string, TrialResult> = { ...mockResults };
+let recordList = [...mockRecords];
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -203,31 +204,34 @@ export const taskApi = {
     return response.data.data;
   },
 
-  executeTask: async (taskId: string): Promise<{ status: string; progress: number }> => {
+  executeTask: async (taskId: string): Promise<{ status: string; progress: number; task: TrialTask }> => {
     if (USE_MOCK) {
       await new Promise(resolve => setTimeout(resolve, 1500));
-      
+
       const taskIndex = taskList.findIndex(t => t.id === taskId);
       if (taskIndex !== -1) {
         taskList[taskIndex] = {
           ...taskList[taskIndex],
           status: 'running'
         };
-        
+
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        taskList[taskIndex] = {
+
+        const completedTask: TrialTask = {
           ...taskList[taskIndex],
           status: 'completed',
           completedAt: new Date().toISOString()
         };
-        
+
+        taskList[taskIndex] = completedTask;
+
         if (!resultCache[taskId]) {
-          resultCache[taskId] = generateMockResult(taskList[taskIndex]);
+          resultCache[taskId] = generateMockResult(completedTask);
         }
       }
-      
-      return { status: 'completed', progress: 100 };
+
+      const task = taskList.find(t => t.id === taskId);
+      return { status: 'completed', progress: 100, task: task! };
     }
     const response = await api.post(`/tasks/${taskId}/execute`);
     return response.data.data;
@@ -382,7 +386,7 @@ export const recordApi = {
   getRecords: async (): Promise<TrialRecord[]> => {
     if (USE_MOCK) {
       await new Promise(resolve => setTimeout(resolve, 300));
-      return mockRecords;
+      return recordList;
     }
     const response = await api.get('/records');
     return response.data.data;
@@ -391,10 +395,16 @@ export const recordApi = {
   getRecordById: async (id: string): Promise<TrialRecord> => {
     if (USE_MOCK) {
       await new Promise(resolve => setTimeout(resolve, 200));
-      return mockRecords.find(r => r.id === id) || mockRecords[0];
+      return recordList.find(r => r.id === id) || recordList[0];
     }
     const response = await api.get(`/records/${id}`);
     return response.data.data;
+  },
+
+  addRecord: (record: TrialRecord) => {
+    if (USE_MOCK) {
+      recordList = [record, ...recordList];
+    }
   }
 };
 
