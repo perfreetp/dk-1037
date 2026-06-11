@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   FileText,
   CheckCircle2,
@@ -11,11 +12,15 @@ import {
   Flag,
   Plus,
   Filter,
-  Search
+  Search,
+  ExternalLink,
+  BarChart3,
+  XCircle,
+  GitCompare
 } from 'lucide-react';
 import { useStore } from '../../stores';
-import { reportApi, recordApi } from '../../services/api';
-import type { EvaluationReport, TrialRecord } from '../../types';
+import { reportApi, recordApi, resultApi } from '../../services/api';
+import type { EvaluationReport, TrialRecord, TrialResult } from '../../types';
 import Table from '../../components/common/Table';
 import Button from '../../components/common/Button';
 import StatCard from '../../components/common/StatCard';
@@ -23,16 +28,20 @@ import { clsx } from 'clsx';
 
 export default function EvaluationReport() {
   const { reports, setReports, records, setRecords, prefillReport, setPrefillReport } = useStore();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'reports' | 'history'>('reports');
   const [riskFilter, setRiskFilter] = useState<string>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<EvaluationReport | null>(null);
+  const [reportResult, setReportResult] = useState<TrialResult | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [showRejectModal, setShowRejectModal] = useState(false);
 
   useEffect(() => {
     loadData();
-    
+
     const params = new URLSearchParams(window.location.search);
     if (params.get('action') === 'create' && prefillReport) {
       setShowCreateModal(true);
@@ -40,18 +49,64 @@ export default function EvaluationReport() {
     }
   }, [prefillReport]);
 
-  const handleViewDetail = (report: EvaluationReport) => {
+  const handleViewDetail = async (report: EvaluationReport) => {
     setSelectedReport(report);
     setShowDetailModal(true);
+
+    // Load the result for this task
+    try {
+      const result = await resultApi.getResult(report.taskId);
+      setReportResult(result);
+    } catch (err) {
+      console.error('加载结果失败', err);
+      setReportResult(null);
+    }
   };
 
-  const handleApprove = async (reportId: string, approved: boolean) => {
-    alert(approved ? '报告已通过审批' : '报告已驳回');
+  const handleApprove = async (reportId: string) => {
+    // Update report approval status
+    const updatedReports = reports.map(r =>
+      r.id === reportId ? { ...r, isApproved: true } : r
+    );
+    setReports(updatedReports);
+
+    if (selectedReport && selectedReport.id === reportId) {
+      setSelectedReport({ ...selectedReport, isApproved: true });
+    }
+
+    alert('报告已通过审批');
+    setShowDetailModal(false);
+  };
+
+  const handleReject = () => {
+    if (!rejectReason.trim()) {
+      alert('请填写驳回原因');
+      return;
+    }
+
+    const updatedReports = reports.map(r =>
+      r.id === selectedReport?.id ? { ...r, isApproved: false, rejectReason } : r
+    );
+    setReports(updatedReports);
+
+    if (selectedReport) {
+      setSelectedReport({ ...selectedReport, isApproved: false, rejectReason });
+    }
+
+    alert('报告已驳回，原因：' + rejectReason);
+    setShowRejectModal(false);
+    setRejectReason('');
     setShowDetailModal(false);
   };
 
   const handleViewRecord = (record: TrialRecord) => {
     navigate(`/results/${record.taskId}`);
+  };
+
+  const handleNavigateToResult = () => {
+    if (selectedReport) {
+      navigate(`/results/${selectedReport.taskId}`);
+    }
   };
 
   const loadData = async () => {
@@ -428,70 +483,251 @@ ${report.suggestion}
 
       {showDetailModal && selectedReport && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-5xl p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-white">报告详情</h2>
+              <h2 className="text-xl font-bold text-white">评估报告详情</h2>
               <button
-                onClick={() => setShowDetailModal(false)}
-                className="text-slate-400 hover:text-white transition-colors"
+                onClick={() => {
+                  setShowDetailModal(false);
+                  setReportResult(null);
+                }}
+                className="text-slate-400 hover:text-white transition-colors text-2xl"
               >
                 ✕
               </button>
             </div>
 
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">报告ID</label>
-                  <p className="text-blue-400 font-mono">{selectedReport.id}</p>
+              {/* 报告基本信息 */}
+              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">报告ID</label>
+                    <p className="text-sm text-blue-400 font-mono">{selectedReport.id}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">风险等级</label>
+                    <p className={`text-sm font-medium ${
+                      selectedReport.riskLevel === 'low' ? 'text-green-400' :
+                      selectedReport.riskLevel === 'medium' ? 'text-yellow-400' :
+                      'text-red-400'
+                    }`}>
+                      {selectedReport.riskLevel === 'low' ? '🟢 低风险' :
+                       selectedReport.riskLevel === 'medium' ? '🟡 中风险' :
+                       selectedReport.riskLevel === 'high' ? '🟠 高风险' : '🔴 严重风险'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">审批状态</label>
+                    <p className={`text-sm font-medium ${selectedReport.isApproved ? 'text-green-400' : 'text-yellow-400'}`}>
+                      {selectedReport.isApproved ? '✅ 已审批' : '⏳ 待审批'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">创建时间</label>
+                    <p className="text-sm text-slate-300">{new Date(selectedReport.createdAt).toLocaleString('zh-CN')}</p>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">关联任务</label>
-                  <p className="text-slate-300">{selectedReport.taskId}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">风险等级</label>
-                  <p className={selectedReport.riskLevel === 'low' ? 'text-green-400' : selectedReport.riskLevel === 'high' || selectedReport.riskLevel === 'critical' ? 'text-red-400' : 'text-yellow-400'}>
-                    {selectedReport.riskLevel === 'low' ? '低风险' : selectedReport.riskLevel === 'medium' ? '中风险' : selectedReport.riskLevel === 'high' ? '高风险' : '严重风险'}
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">审批状态</label>
-                  <p className={selectedReport.isApproved ? 'text-green-400' : 'text-yellow-400'}>
-                    {selectedReport.isApproved ? '已审批' : '待审批'}
-                  </p>
+
+                <div className="flex items-center space-x-3">
+                  <span className="text-sm text-slate-400">关联任务:</span>
+                  <button
+                    onClick={handleNavigateToResult}
+                    className="flex items-center space-x-1 px-3 py-1.5 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg hover:bg-blue-500/30 transition-colors"
+                  >
+                    <span className="font-mono text-sm">{selectedReport.taskId}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </button>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">评估结论</label>
-                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-                  <p className="text-slate-300 whitespace-pre-wrap">{selectedReport.conclusion}</p>
+              {/* 试算结果概览 */}
+              {reportResult && (
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-white flex items-center space-x-2">
+                      <BarChart3 className="w-5 h-5 text-blue-400" />
+                      <span>试算结果概览</span>
+                    </h3>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={<ExternalLink className="w-4 h-4" />}
+                      onClick={handleNavigateToResult}
+                    >
+                      查看完整结果
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 text-center">
+                      <p className="text-2xl font-bold text-white">{reportResult.statistics.total}</p>
+                      <p className="text-xs text-slate-400 mt-1">总样本数</p>
+                    </div>
+                    <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 text-center">
+                      <p className="text-2xl font-bold text-green-400">{reportResult.statistics.hitCount}</p>
+                      <p className="text-xs text-slate-400 mt-1">命中数</p>
+                    </div>
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-center">
+                      <p className="text-2xl font-bold text-red-400">{reportResult.statistics.missCount}</p>
+                      <p className="text-xs text-slate-400 mt-1">未命中数</p>
+                    </div>
+                    <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-center">
+                      <p className="text-2xl font-bold text-blue-400">{reportResult.statistics.passRate.toFixed(1)}%</p>
+                      <p className="text-xs text-slate-400 mt-1">通过率</p>
+                    </div>
+                    <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4 text-center">
+                      <p className="text-2xl font-bold text-purple-400">{reportResult.statistics.avgExecutionTime}ms</p>
+                      <p className="text-xs text-slate-400 mt-1">平均耗时</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-4 mt-4">
+                    <button
+                      onClick={() => navigate(`/results/${selectedReport.taskId}?tab=hit`)}
+                      className="flex items-center space-x-2 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-lg transition-colors"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-green-400" />
+                      <span className="text-sm text-slate-300">命中明细 ({reportResult.hitDetails.length})</span>
+                    </button>
+                    <button
+                      onClick={() => navigate(`/results/${selectedReport.taskId}?tab=miss`)}
+                      className="flex items-center space-x-2 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-lg transition-colors"
+                    >
+                      <XCircle className="w-4 h-4 text-red-400" />
+                      <span className="text-sm text-slate-300">未命中分析 ({reportResult.missDetails.length})</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 可疑样本摘要 */}
+              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-white flex items-center space-x-2">
+                    <AlertTriangle className="w-5 h-5 text-red-400" />
+                    <span>可疑样本摘要</span>
+                  </h3>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<ExternalLink className="w-4 h-4" />}
+                    onClick={() => navigate(`/results/${selectedReport.taskId}?tab=suspicious`)}
+                  >
+                    查看可疑样本列表
+                  </Button>
+                </div>
+
+                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
+                  {selectedReport.conclusion.includes('可疑样本数') ? (
+                    <div className="space-y-2">
+                      <p className="text-slate-300 text-sm">
+                        共发现 <span className="text-red-400 font-bold">{selectedReport.conclusion.match(/可疑样本数[：:]\s*(\d+)/)?.[1] || 0}</span> 个可疑样本
+                      </p>
+                      {selectedReport.conclusion.includes('可疑样本备注') && (
+                        <div className="mt-3 pt-3 border-t border-slate-700">
+                          <p className="text-xs text-slate-400 mb-2">可疑样本详情：</p>
+                          <div className="space-y-1">
+                            {selectedReport.conclusion.split('\n').filter(line => line.includes(':')).slice(-5).map((line, idx) => (
+                              <p key={idx} className="text-xs text-slate-400 font-mono">{line}</p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-slate-500 text-sm">暂无可疑样本</p>
+                  )}
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">上线建议</label>
-                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-                  <p className="text-slate-300 whitespace-pre-wrap">{selectedReport.suggestion}</p>
+              {/* 评估结论 */}
+              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">评估结论</h3>
+                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
+                  <p className="text-slate-300 whitespace-pre-wrap leading-relaxed">{selectedReport.conclusion}</p>
                 </div>
               </div>
 
+              {/* 上线建议 */}
+              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">上线建议</h3>
+                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
+                  <p className="text-slate-300 whitespace-pre-wrap leading-relaxed">{selectedReport.suggestion}</p>
+                </div>
+              </div>
+
+              {/* 驳回原因 */}
+              {(selectedReport as any).rejectReason && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-red-400 mb-4">驳回原因</h3>
+                  <div className="bg-slate-900/50 border border-red-500/30 rounded-lg p-4">
+                    <p className="text-slate-300">{(selectedReport as any).rejectReason}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* 操作按钮 */}
               <div className="flex items-center justify-between pt-4 border-t border-slate-700">
-                <div className="text-sm text-slate-400">
-                  创建时间: {new Date(selectedReport.createdAt).toLocaleString('zh-CN')}
+                <div className="text-sm text-slate-500">
+                  最后更新: {new Date(selectedReport.createdAt).toLocaleString('zh-CN')}
                 </div>
                 {!selectedReport.isApproved && (
                   <div className="flex space-x-3">
-                    <Button variant="secondary" onClick={() => handleApprove(selectedReport.id, false)}>
+                    <Button
+                      variant="danger"
+                      onClick={() => setShowRejectModal(true)}
+                    >
                       驳回
                     </Button>
-                    <Button onClick={() => handleApprove(selectedReport.id, true)}>
+                    <Button
+                      onClick={() => handleApprove(selectedReport.id)}
+                    >
                       通过审批
                     </Button>
                   </div>
                 )}
+                {selectedReport.isApproved && (
+                  <div className="flex items-center space-x-2 text-green-400">
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span className="font-medium">已通过审批</span>
+                  </div>
+                )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 驳回原因弹窗 */}
+      {showRejectModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60]">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-white mb-4">驳回报告</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  驳回原因 <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="请输入驳回原因，便于后续追溯..."
+                  rows={4}
+                  className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3 mt-6">
+              <Button variant="secondary" onClick={() => {
+                setShowRejectModal(false);
+                setRejectReason('');
+              }}>
+                取消
+              </Button>
+              <Button variant="danger" onClick={handleReject}>
+                确认驳回
+              </Button>
             </div>
           </div>
         </div>

@@ -125,14 +125,14 @@ export default function ResultCompare() {
   const handleGenerateReport = () => {
     if (!currentResult || !taskId) return;
 
-    const suspiciousRemarks = anomalyMarks.map(m => `${m.sampleId}: ${m.remark}`);
+    const suspiciousRemarks = currentTaskSuspiciousMarks.map(m => `${m.sampleId}: ${m.remark}`);
 
     setPrefillReport({
       taskId,
       passRate: currentResult.statistics.passRate,
       hitCount: currentResult.statistics.hitCount,
       missCount: currentResult.statistics.missCount,
-      suspiciousCount: anomalyMarks.length,
+      suspiciousCount: currentTaskSuspiciousMarks.length,
       suspiciousRemarks
     });
 
@@ -144,6 +144,36 @@ export default function ResultCompare() {
   };
 
   const suspiciousCount = anomalyMarks.length;
+
+  // Filter suspicious samples for current task
+  const getCurrentTaskSuspiciousMarks = () => {
+    const currentResultId = currentResult?.id;
+    if (!currentResultId) return [];
+
+    return anomalyMarks.filter(mark => {
+      const hitSample = currentResult?.hitDetails.find(h => h.sampleId === mark.sampleId);
+      const missSample = currentResult?.missDetails.find(m => m.sampleId === mark.sampleId);
+      return hitSample || missSample;
+    });
+  };
+
+  const currentTaskSuspiciousMarks = getCurrentTaskSuspiciousMarks();
+
+  // Filter by hit/miss status
+  const getFilteredSuspiciousMarks = () => {
+    if (suspiciousFilter === 'all') {
+      return currentTaskSuspiciousMarks;
+    }
+
+    return currentTaskSuspiciousMarks.filter(mark => {
+      const hitSample = currentResult?.hitDetails.find(h => h.sampleId === mark.sampleId);
+      if (suspiciousFilter === 'hit' && hitSample) return true;
+      if (suspiciousFilter === 'miss' && !hitSample) return true;
+      return false;
+    });
+  };
+
+  const filteredSuspiciousMarks = getFilteredSuspiciousMarks();
 
   if (loading || !currentResult) {
     return (
@@ -216,10 +246,10 @@ export default function ResultCompare() {
           <p className="text-slate-400">任务ID: {taskId} - 详细分析试算结果和版本差异</p>
         </div>
         <div className="flex space-x-3">
-          {suspiciousCount > 0 && (
+          {currentTaskSuspiciousMarks.length > 0 && (
             <div className="flex items-center space-x-2 px-3 py-2 bg-red-500/20 border border-red-500/30 rounded-lg">
               <AlertTriangle className="w-4 h-4 text-red-400" />
-              <span className="text-sm text-red-400 font-medium">{suspiciousCount}个可疑样本</span>
+              <span className="text-sm text-red-400 font-medium">{currentTaskSuspiciousMarks.length}个可疑样本</span>
             </div>
           )}
           <Button variant="secondary" icon={<Download className="w-4 h-4" />} onClick={handleExport}>
@@ -338,7 +368,7 @@ export default function ResultCompare() {
             {[
               { key: 'hit', label: '命中明细', count: hitDetails.length, icon: CheckCircle2 },
               { key: 'miss', label: '未命中分析', count: missDetails.length, icon: XCircle },
-              { key: 'suspicious', label: '可疑样本', count: anomalyMarks.length, icon: AlertTriangle },
+              { key: 'suspicious', label: '可疑样本', count: currentTaskSuspiciousMarks.length, icon: AlertTriangle },
               { key: 'chain', label: '规则链路', count: ruleChain.length, icon: GitCompare },
               { key: 'compare', label: '版本对比', count: 0, icon: BarChart3 }
             ].map(tab => (
@@ -529,7 +559,7 @@ export default function ResultCompare() {
                   </select>
                 </div>
                 <div className="text-sm text-slate-400">
-                  共 {anomalyMarks.length} 个可疑样本
+                  共 {filteredSuspiciousMarks.length} 个可疑样本
                 </div>
               </div>
 
@@ -574,7 +604,7 @@ export default function ResultCompare() {
                     )
                   }
                 ]}
-                data={anomalyMarks}
+                data={filteredSuspiciousMarks}
                 emptyText="暂无可疑样本"
               />
             </div>
