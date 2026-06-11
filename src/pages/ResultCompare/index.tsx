@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   CheckCircle2,
   XCircle,
@@ -13,11 +13,13 @@ import {
   TrendingUp,
   TrendingDown,
   Users,
-  Target
+  Target,
+  AlertTriangle,
+  MessageSquare
 } from 'lucide-react';
 import { useStore } from '../../stores';
 import { resultApi, taskApi } from '../../services/api';
-import type { TrialResult, ComparisonData, GroupedData } from '../../types';
+import type { TrialResult, ComparisonData, GroupedData, AnomalyMark } from '../../types';
 import Table from '../../components/common/Table';
 import Button from '../../components/common/Button';
 import StatCard from '../../components/common/StatCard';
@@ -39,10 +41,14 @@ import {
 
 export default function ResultCompare() {
   const { taskId } = useParams<{ taskId: string }>();
-  const { currentResult, setCurrentResult, comparisonData, setComparisonData } = useStore();
+  const navigate = useNavigate();
+  const { currentResult, setCurrentResult, comparisonData, setComparisonData, anomalyMarks, addAnomalyMark, removeAnomalyMark } = useStore();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'hit' | 'miss' | 'chain' | 'compare'>('hit');
   const [groupDimension, setGroupDimension] = useState<'group' | 'channel' | 'timeRange'>('group');
+  const [showMarkModal, setShowMarkModal] = useState(false);
+  const [selectedSample, setSelectedSample] = useState<string | null>(null);
+  const [markRemark, setMarkRemark] = useState('');
 
   useEffect(() => {
     if (taskId) {
@@ -66,6 +72,64 @@ export default function ResultCompare() {
     }
   };
 
+  const handleMarkSample = (sampleId: string) => {
+    setSelectedSample(sampleId);
+    setShowMarkModal(true);
+  };
+
+  const handleSubmitMark = () => {
+    if (!selectedSample || !markRemark.trim()) {
+      alert('请填写备注信息');
+      return;
+    }
+    
+    const mark: AnomalyMark = {
+      id: `mark_${Date.now()}`,
+      resultId: currentResult?.id || '',
+      sampleId: selectedSample,
+      anomalyType: 'suspicious',
+      remark: markRemark,
+      markedAt: new Date().toISOString()
+    };
+    
+    addAnomalyMark(mark);
+    setShowMarkModal(false);
+    setMarkRemark('');
+    setSelectedSample(null);
+    alert('样本标记成功');
+  };
+
+  const handleRemoveMark = (markId: string) => {
+    removeAnomalyMark(markId);
+    alert('标记已移除');
+  };
+
+  const handleExport = async () => {
+    try {
+      const blob = await resultApi.exportResult(taskId || '');
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `trial_result_${taskId}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('导出失败', err);
+    }
+  };
+
+  const handleGenerateReport = () => {
+    navigate('/reports');
+  };
+
+  const getMarkForSample = (sampleId: string) => {
+    return anomalyMarks.find(m => m.sampleId === sampleId);
+  };
+
+  const suspiciousCount = anomalyMarks.length;
+
   if (loading || !currentResult) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -85,8 +149,19 @@ export default function ResultCompare() {
   const getGroupedData = (): GroupedData => {
     const groups: Record<string, { total: number; hit: number }> = {};
     
-    [...hitDetails, ...missDetails].forEach((detail: any) => {
-      const groupKey = detail.group || '未分组';
+    const allDetails = [...hitDetails, ...missDetails];
+    
+    allDetails.forEach((detail: any) => {
+      let groupKey = '未分组';
+      
+      if (groupDimension === 'group') {
+        groupKey = detail.group || detail.groupTag || '未分组';
+      } else if (groupDimension === 'channel') {
+        groupKey = detail.channel || '未知渠道';
+      } else if (groupDimension === 'timeRange') {
+        groupKey = detail.timeRange || detail.date || '未知时间段';
+      }
+      
       if (!groups[groupKey]) {
         groups[groupKey] = { total: 0, hit: 0 };
       }
@@ -99,7 +174,7 @@ export default function ResultCompare() {
       groups: Object.entries(groups).map(([name, data]) => ({
         name,
         count: data.total,
-        passRate: data.total > 0 ? (data.hit / data.total * 100).toFixed(1) as unknown as number : 0
+        passRate: data.total > 0 ? parseFloat((data.hit / data.total * 100).toFixed(1)) : 0
       }))
     };
   };
@@ -126,10 +201,16 @@ export default function ResultCompare() {
           <p className="text-slate-400">任务ID: {taskId} - 详细分析试算结果和版本差异</p>
         </div>
         <div className="flex space-x-3">
-          <Button variant="secondary" icon={<Download className="w-4 h-4" />}>
+          {suspiciousCount > 0 && (
+            <div className="flex items-center space-x-2 px-3 py-2 bg-red-500/20 border border-red-500/30 rounded-lg">
+              <AlertTriangle className="w-4 h-4 text-red-400" />
+              <span className="text-sm text-red-400 font-medium">{suspiciousCount}个可疑样本</span>
+            </div>
+          )}
+          <Button variant="secondary" icon={<Download className="w-4 h-4" />} onClick={handleExport}>
             导出报告
           </Button>
-          <Button icon={<Flag className="w-4 h-4" />}>
+          <Button icon={<Flag className="w-4 h-4" />} onClick={handleGenerateReport}>
             生成评估报告
           </Button>
         </div>
@@ -313,6 +394,38 @@ export default function ResultCompare() {
                   key: 'executionTime',
                   label: '执行时间',
                   render: (item) => <span className="text-slate-400">{item.executionTime}ms</span>
+                },
+                {
+                  key: 'mark',
+                  label: '标记',
+                  render: (item: any) => {
+                    const mark = getMarkForSample(item.sampleId);
+                    if (mark) {
+                      return (
+                        <div className="flex items-center space-x-2">
+                          <span className="px-2 py-1 text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded flex items-center space-x-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>可疑</span>
+                          </span>
+                          <button
+                            onClick={() => handleRemoveMark(mark.id)}
+                            className="text-slate-400 hover:text-red-400 transition-colors text-xs"
+                            title="移除标记"
+                          >
+                            移除
+                          </button>
+                        </div>
+                      );
+                    }
+                    return (
+                      <button
+                        onClick={() => handleMarkSample(item.sampleId)}
+                        className="px-2 py-1 text-xs text-slate-400 hover:text-red-400 border border-slate-600 hover:border-red-500/50 rounded transition-colors"
+                      >
+                        标记可疑
+                      </button>
+                    );
+                  }
                 }
               ]}
               data={hitDetails}
@@ -469,6 +582,45 @@ export default function ResultCompare() {
           )}
         </div>
       </div>
+
+      {showMarkModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
+              <AlertTriangle className="w-5 h-5 text-red-400" />
+              <span>标记可疑样本</span>
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">样本ID</label>
+                <p className="text-blue-400 font-mono">{selectedSample}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">备注信息 <span className="text-red-400">*</span></label>
+                <textarea
+                  value={markRemark}
+                  onChange={(e) => setMarkRemark(e.target.value)}
+                  placeholder="请输入可疑原因或备注..."
+                  rows={4}
+                  className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3 mt-6">
+              <Button variant="secondary" onClick={() => {
+                setShowMarkModal(false);
+                setMarkRemark('');
+                setSelectedSample(null);
+              }}>
+                取消
+              </Button>
+              <Button onClick={handleSubmitMark}>
+                确认标记
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

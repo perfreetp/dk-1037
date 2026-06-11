@@ -14,6 +14,10 @@ export default function SamplePrep() {
   const [activeTab, setActiveTab] = useState<'samples' | 'testsets'>('samples');
   const [dragActive, setDragActive] = useState(false);
   const [groupFilter, setGroupFilter] = useState<string>('all');
+  const [showSaveTestSetModal, setShowSaveTestSetModal] = useState(false);
+  const [showCreateTestSetModal, setShowCreateTestSetModal] = useState(false);
+  const [newTestSetName, setNewTestSetName] = useState('');
+  const [newTestSetDesc, setNewTestSetDesc] = useState('');
 
   useEffect(() => {
     loadData();
@@ -102,6 +106,65 @@ export default function SamplePrep() {
     } else {
       setSelectedSamples(filteredSamples.map(s => s.id));
     }
+  };
+
+  const handleSaveAsTestSet = async () => {
+    if (selectedSamples.length === 0) {
+      alert('请先选择样本');
+      return;
+    }
+    try {
+      await testSetApi.createTestSet({
+        name: `测试集_${Date.now()}`,
+        description: `包含${selectedSamples.length}个样本`,
+        sampleIds: [...selectedSamples]
+      });
+      await loadData();
+      setShowSaveTestSetModal(false);
+      alert('测试集保存成功');
+    } catch (err) {
+      console.error('保存测试集失败', err);
+    }
+  };
+
+  const handleCreateTestSet = async () => {
+    if (!newTestSetName.trim()) {
+      alert('请输入测试集名称');
+      return;
+    }
+    try {
+      await testSetApi.createTestSet({
+        name: newTestSetName,
+        description: newTestSetDesc,
+        sampleIds: []
+      });
+      await loadData();
+      setShowCreateTestSetModal(false);
+      setNewTestSetName('');
+      setNewTestSetDesc('');
+      alert('测试集创建成功');
+    } catch (err) {
+      console.error('创建测试集失败', err);
+    }
+  };
+
+  const handleDeleteTestSet = async (testSetId: string) => {
+    if (!confirm('确定要删除这个测试集吗？')) {
+      return;
+    }
+    try {
+      await testSetApi.deleteTestSet(testSetId);
+      await loadData();
+      alert('测试集删除成功');
+    } catch (err) {
+      console.error('删除测试集失败', err);
+    }
+  };
+
+  const handleUseTestSet = (testSet: TestSet) => {
+    setSelectedSamples(testSet.sampleIds);
+    setActiveTab('samples');
+    alert(`已选择测试集"${testSet.name}"中的${testSet.sampleIds.length}个样本`);
   };
 
   const filteredSamples = samples.filter(sample => {
@@ -212,10 +275,18 @@ export default function SamplePrep() {
       label: '操作',
       render: (testSet: TestSet) => (
         <div className="flex items-center space-x-2">
-          <button className="p-1.5 text-slate-400 hover:text-blue-400 transition-colors" title="使用此测试集">
+          <button 
+            onClick={() => handleUseTestSet(testSet)}
+            className="p-1.5 text-slate-400 hover:text-blue-400 transition-colors" 
+            title="使用此测试集"
+          >
             <FolderOpen className="w-4 h-4" />
           </button>
-          <button className="p-1.5 text-slate-400 hover:text-red-400 transition-colors" title="删除">
+          <button 
+            onClick={() => handleDeleteTestSet(testSet.id)}
+            className="p-1.5 text-slate-400 hover:text-red-400 transition-colors" 
+            title="删除"
+          >
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
@@ -331,6 +402,7 @@ export default function SamplePrep() {
                       size="sm"
                       variant="secondary"
                       icon={<FolderOpen className="w-4 h-4" />}
+                      onClick={() => setShowSaveTestSetModal(true)}
                     >
                       保存为测试集
                     </Button>
@@ -352,7 +424,7 @@ export default function SamplePrep() {
                   <FolderOpen className="w-5 h-5" />
                   <span className="text-sm">管理常用测试集</span>
                 </div>
-                <Button size="sm" icon={<Plus className="w-4 h-4" />}>
+                <Button size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => setShowCreateTestSetModal(true)}>
                   新建测试集
                 </Button>
               </div>
@@ -367,6 +439,63 @@ export default function SamplePrep() {
           )}
         </div>
       </div>
+
+      {showSaveTestSetModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-white mb-4">保存为测试集</h3>
+            <p className="text-sm text-slate-400 mb-6">
+              确定要将已选择的 {selectedSamples.length} 个样本保存为测试集吗？
+            </p>
+            <div className="flex justify-end space-x-3">
+              <Button variant="secondary" onClick={() => setShowSaveTestSetModal(false)}>
+                取消
+              </Button>
+              <Button onClick={handleSaveAsTestSet}>
+                确定保存
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCreateTestSetModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-white mb-6">新建测试集</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">测试集名称</label>
+                <input
+                  type="text"
+                  value={newTestSetName}
+                  onChange={(e) => setNewTestSetName(e.target.value)}
+                  placeholder="请输入测试集名称"
+                  className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">描述（可选）</label>
+                <textarea
+                  value={newTestSetDesc}
+                  onChange={(e) => setNewTestSetDesc(e.target.value)}
+                  placeholder="请输入测试集描述"
+                  rows={3}
+                  className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3 mt-6">
+              <Button variant="secondary" onClick={() => setShowCreateTestSetModal(false)}>
+                取消
+              </Button>
+              <Button onClick={handleCreateTestSet}>
+                创建
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

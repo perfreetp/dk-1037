@@ -76,6 +76,37 @@ export default function EvaluationReport() {
     );
   };
 
+  const handleExportReport = (report: EvaluationReport) => {
+    const reportContent = `
+评估报告
+=========================================
+
+报告ID: ${report.id}
+关联任务: ${report.taskId}
+风险等级: ${report.riskLevel === 'low' ? '低风险' : report.riskLevel === 'medium' ? '中风险' : report.riskLevel === 'high' ? '高风险' : '严重风险'}
+审批状态: ${report.isApproved ? '已审批' : '待审批'}
+创建时间: ${new Date(report.createdAt).toLocaleString('zh-CN')}
+
+评估结论:
+${report.conclusion}
+
+上线建议:
+${report.suggestion}
+
+=========================================
+    `.trim();
+
+    const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `评估报告_${report.id}_${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
   const filteredReports = reports.filter(report => {
     return riskFilter === 'all' || report.riskLevel === riskFilter;
   });
@@ -140,7 +171,11 @@ export default function EvaluationReport() {
           <button className="p-1.5 text-slate-400 hover:text-blue-400 transition-colors" title="查看详情">
             <Eye className="w-4 h-4" />
           </button>
-          <button className="p-1.5 text-slate-400 hover:text-green-400 transition-colors" title="导出">
+          <button 
+            onClick={() => handleExportReport(report)}
+            className="p-1.5 text-slate-400 hover:text-green-400 transition-colors" 
+            title="导出"
+          >
             <Download className="w-4 h-4" />
           </button>
         </div>
@@ -306,7 +341,17 @@ export default function EvaluationReport() {
                     </select>
                   </div>
                 </div>
-                <Button variant="secondary" icon={<Download className="w-4 h-4" />}>
+                <Button 
+                  variant="secondary" 
+                  icon={<Download className="w-4 h-4" />}
+                  onClick={() => {
+                    if (filteredReports.length > 0) {
+                      filteredReports.forEach(report => handleExportReport(report));
+                    } else {
+                      alert('没有可导出的报告');
+                    }
+                  }}
+                >
                   批量导出
                 </Button>
               </div>
