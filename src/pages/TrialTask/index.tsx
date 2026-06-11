@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Play, Pause, CheckCircle, XCircle, Clock, Loader2, Calendar, Settings } from 'lucide-react';
+import { Plus, Play, Pause, CheckCircle, XCircle, Clock, Loader2, Calendar, Settings, Flag } from 'lucide-react';
 import { useStore } from '../../stores';
 import { taskApi, ruleApi, sampleApi } from '../../services/api';
 import type { TrialTask, RuleVersion, SampleData } from '../../types';
@@ -138,14 +138,24 @@ export default function TrialTask() {
             </Button>
           )}
           {task.status === 'completed' && (
-            <Button
-              size="sm"
-              variant="secondary"
-              icon={<Settings className="w-4 h-4" />}
-              onClick={() => navigate(`/results/${task.id}`)}
-            >
-              查看结果
-            </Button>
+            <div className="flex items-center space-x-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Settings className="w-4 h-4" />}
+                onClick={() => navigate(`/results/${task.id}`)}
+              >
+                查看结果
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<Flag className="w-4 h-4" />}
+                onClick={() => navigate(`/reports?taskId=${task.id}`)}
+              >
+                生成报告
+              </Button>
+            </div>
           )}
           {task.status === 'running' && (
             <Button

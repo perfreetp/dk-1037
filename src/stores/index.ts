@@ -27,6 +27,14 @@ interface AppState {
   records: TrialRecord[];
   loading: boolean;
   error: string | null;
+  prefillReport: {
+    taskId?: string;
+    passRate?: number;
+    hitCount?: number;
+    missCount?: number;
+    suspiciousCount?: number;
+    suspiciousRemarks?: string[];
+  } | null;
   setRules: (rules: RuleVersion[]) => void;
   setSelectedRule: (rule: RuleVersion | null) => void;
   setSamples: (samples: SampleData[]) => void;
@@ -45,6 +53,7 @@ interface AppState {
   setRecords: (records: TrialRecord[]) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  setPrefillReport: (data: any) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -63,6 +72,7 @@ export const useStore = create<AppState>((set) => ({
   records: [],
   loading: false,
   error: null,
+  prefillReport: null,
 
   setRules: (rules) => set({ rules }),
   setSelectedRule: (selectedRule) => set({ selectedRule }),
@@ -88,4 +98,5 @@ export const useStore = create<AppState>((set) => ({
   setRecords: (records) => set({ records }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
+  setPrefillReport: (data) => set({ prefillReport: data }),
 }));

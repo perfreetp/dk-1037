@@ -22,15 +22,37 @@ import StatCard from '../../components/common/StatCard';
 import { clsx } from 'clsx';
 
 export default function EvaluationReport() {
-  const { reports, setReports, records, setRecords } = useStore();
+  const { reports, setReports, records, setRecords, prefillReport, setPrefillReport } = useStore();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'reports' | 'history'>('reports');
   const [riskFilter, setRiskFilter] = useState<string>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<EvaluationReport | null>(null);
 
   useEffect(() => {
     loadData();
-  }, []);
+    
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('action') === 'create' && prefillReport) {
+      setShowCreateModal(true);
+      window.history.replaceState({}, '', '/reports');
+    }
+  }, [prefillReport]);
+
+  const handleViewDetail = (report: EvaluationReport) => {
+    setSelectedReport(report);
+    setShowDetailModal(true);
+  };
+
+  const handleApprove = async (reportId: string, approved: boolean) => {
+    alert(approved ? '报告已通过审批' : '报告已驳回');
+    setShowDetailModal(false);
+  };
+
+  const handleViewRecord = (record: TrialRecord) => {
+    navigate(`/results/${record.taskId}`);
+  };
 
   const loadData = async () => {
     try {
@@ -168,7 +190,11 @@ ${report.suggestion}
       label: '操作',
       render: (report: EvaluationReport) => (
         <div className="flex items-center space-x-2">
-          <button className="p-1.5 text-slate-400 hover:text-blue-400 transition-colors" title="查看详情">
+          <button 
+            onClick={() => handleViewDetail(report)}
+            className="p-1.5 text-slate-400 hover:text-blue-400 transition-colors" 
+            title="查看详情"
+          >
             <Eye className="w-4 h-4" />
           </button>
           <button 
@@ -228,7 +254,11 @@ ${report.suggestion}
       label: '操作',
       render: (record: TrialRecord) => (
         <div className="flex items-center space-x-2">
-          <button className="p-1.5 text-slate-400 hover:text-blue-400 transition-colors" title="查看详情">
+          <button 
+            onClick={() => handleViewRecord(record)}
+            className="p-1.5 text-slate-400 hover:text-blue-400 transition-colors" 
+            title="查看结果"
+          >
             <Eye className="w-4 h-4" />
           </button>
           <button className="p-1.5 text-slate-400 hover:text-purple-400 transition-colors" title="恢复此状态">
@@ -383,12 +413,88 @@ ${report.suggestion}
 
       {showCreateModal && (
         <CreateReportModal
-          onClose={() => setShowCreateModal(false)}
+          onClose={() => {
+            setShowCreateModal(false);
+            setPrefillReport(null);
+          }}
           onSuccess={() => {
             setShowCreateModal(false);
+            setPrefillReport(null);
             loadData();
           }}
+          prefillData={prefillReport}
         />
+      )}
+
+      {showDetailModal && selectedReport && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-white">报告详情</h2>
+              <button
+                onClick={() => setShowDetailModal(false)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">报告ID</label>
+                  <p className="text-blue-400 font-mono">{selectedReport.id}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">关联任务</label>
+                  <p className="text-slate-300">{selectedReport.taskId}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">风险等级</label>
+                  <p className={selectedReport.riskLevel === 'low' ? 'text-green-400' : selectedReport.riskLevel === 'high' || selectedReport.riskLevel === 'critical' ? 'text-red-400' : 'text-yellow-400'}>
+                    {selectedReport.riskLevel === 'low' ? '低风险' : selectedReport.riskLevel === 'medium' ? '中风险' : selectedReport.riskLevel === 'high' ? '高风险' : '严重风险'}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">审批状态</label>
+                  <p className={selectedReport.isApproved ? 'text-green-400' : 'text-yellow-400'}>
+                    {selectedReport.isApproved ? '已审批' : '待审批'}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-2">评估结论</label>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                  <p className="text-slate-300 whitespace-pre-wrap">{selectedReport.conclusion}</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-2">上线建议</label>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                  <p className="text-slate-300 whitespace-pre-wrap">{selectedReport.suggestion}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-slate-700">
+                <div className="text-sm text-slate-400">
+                  创建时间: {new Date(selectedReport.createdAt).toLocaleString('zh-CN')}
+                </div>
+                {!selectedReport.isApproved && (
+                  <div className="flex space-x-3">
+                    <Button variant="secondary" onClick={() => handleApprove(selectedReport.id, false)}>
+                      驳回
+                    </Button>
+                    <Button onClick={() => handleApprove(selectedReport.id, true)}>
+                      通过审批
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -397,11 +503,26 @@ ${report.suggestion}
 interface CreateReportModalProps {
   onClose: () => void;
   onSuccess: () => void;
+  prefillData?: {
+    taskId?: string;
+    passRate?: number;
+    hitCount?: number;
+    missCount?: number;
+    suspiciousCount?: number;
+    suspiciousRemarks?: string[];
+  } | null;
 }
 
-function CreateReportModal({ onClose, onSuccess }: CreateReportModalProps) {
-  const [taskId, setTaskId] = useState('');
-  const [conclusion, setConclusion] = useState('');
+function CreateReportModal({ onClose, onSuccess, prefillData }: CreateReportModalProps) {
+  const prefillConclusion = prefillData ? `试算结果分析：
+- 通过率：${prefillData.passRate?.toFixed(1)}%
+- 命中数：${prefillData.hitCount}条
+- 未命中数：${prefillData.missCount}条
+- 可疑样本数：${prefillData.suspiciousCount || 0}条
+${prefillData.suspiciousRemarks && prefillData.suspiciousRemarks.length > 0 ? `\n可疑样本备注：\n${prefillData.suspiciousRemarks.join('\n')}` : ''}` : '';
+
+  const [taskId, setTaskId] = useState(prefillData?.taskId || '');
+  const [conclusion, setConclusion] = useState(prefillConclusion);
   const [riskLevel, setRiskLevel] = useState<'low' | 'medium' | 'high' | 'critical'>('medium');
   const [suggestion, setSuggestion] = useState('');
   const [creating, setCreating] = useState(false);

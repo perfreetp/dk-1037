@@ -89,6 +89,9 @@ export interface HitDetail {
   hitCondition: string;
   action: 'allow' | 'block' | 'review' | 'flag';
   executionTime: number;
+  group?: string;
+  channel?: string;
+  timeRange?: string;
 }
 
 export interface MissDetail {
@@ -97,6 +100,9 @@ export interface MissDetail {
   hit: boolean;
   reason: string;
   suggestion: string;
+  group?: string;
+  channel?: string;
+  timeRange?: string;
 }
 
 export interface RuleChainNode {

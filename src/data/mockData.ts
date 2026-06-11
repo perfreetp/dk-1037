@@ -115,13 +115,13 @@ export const mockResults: Record<string, TrialResult> = {
     taskId: 'task_001',
     statistics: { total: 5, hitCount: 4, missCount: 1, passRate: 80.0, avgExecutionTime: 125 },
     hitDetails: [
-      { sampleId: 'sample_001', userId: 'user_1001', hit: true, hitRule: 'rule_001', hitCondition: 'amount > 1000 && amount <= 5000', action: 'allow', executionTime: 120 },
-      { sampleId: 'sample_003', userId: 'user_1003', hit: true, hitRule: 'rule_001', hitCondition: 'amount > 1000 && amount <= 5000', action: 'allow', executionTime: 130 },
-      { sampleId: 'sample_004', userId: 'user_1004', hit: false, hitRule: 'rule_001', hitCondition: 'amount > 5000', action: 'block', executionTime: 115 },
-      { sampleId: 'sample_005', userId: 'user_1005', hit: true, hitRule: 'rule_001', hitCondition: 'amount > 1000 && amount <= 5000', action: 'allow', executionTime: 140 }
+      { sampleId: 'sample_001', userId: 'user_1001', hit: true, hitRule: 'rule_001', hitCondition: 'amount > 1000 && amount <= 5000', action: 'allow', executionTime: 120, group: 'VIP用户', channel: 'mobile', timeRange: '2026-06-01' },
+      { sampleId: 'sample_003', userId: 'user_1003', hit: true, hitRule: 'rule_001', hitCondition: 'amount > 1000 && amount <= 5000', action: 'allow', executionTime: 130, group: 'VIP用户', channel: 'mobile', timeRange: '2026-06-02' },
+      { sampleId: 'sample_004', userId: 'user_1004', hit: false, hitRule: 'rule_001', hitCondition: 'amount > 5000', action: 'block', executionTime: 115, group: '普通用户', channel: 'app', timeRange: '2026-06-02' },
+      { sampleId: 'sample_005', userId: 'user_1005', hit: true, hitRule: 'rule_001', hitCondition: 'amount > 1000 && amount <= 5000', action: 'allow', executionTime: 140, group: '高风险用户', channel: 'web', timeRange: '2026-06-03' }
     ],
     missDetails: [
-      { sampleId: 'sample_002', userId: 'user_1002', hit: false, reason: 'amount <= 1000', suggestion: '低于最低交易限额' }
+      { sampleId: 'sample_002', userId: 'user_1002', hit: false, reason: 'amount <= 1000', suggestion: '低于最低交易限额', group: '普通用户', channel: 'web', timeRange: '2026-06-01' }
     ],
     ruleChain: [
       { nodeId: 'node_001', ruleName: '基础规则检查', status: 'passed', executionTime: 15, details: '通过基础验证' },
@@ -136,9 +136,9 @@ export const mockResults: Record<string, TrialResult> = {
     taskId: 'task_002',
     statistics: { total: 3, hitCount: 3, missCount: 0, passRate: 100.0, avgExecutionTime: 98 },
     hitDetails: [
-      { sampleId: 'sample_003', userId: 'user_1003', hit: true, hitRule: 'rule_002', hitCondition: 'location_change == true && time_gap < 30', action: 'review', executionTime: 95 },
-      { sampleId: 'sample_005', userId: 'user_1005', hit: true, hitRule: 'rule_002', hitCondition: 'location_change == true && time_gap < 30', action: 'review', executionTime: 100 },
-      { sampleId: 'sample_008', userId: 'user_1008', hit: true, hitRule: 'rule_002', hitCondition: 'location_change == true && time_gap < 30', action: 'review', executionTime: 99 }
+      { sampleId: 'sample_003', userId: 'user_1003', hit: true, hitRule: 'rule_002', hitCondition: 'location_change == true && time_gap < 30', action: 'review', executionTime: 95, group: 'VIP用户', channel: 'mobile', timeRange: '2026-06-02' },
+      { sampleId: 'sample_005', userId: 'user_1005', hit: true, hitRule: 'rule_002', hitCondition: 'location_change == true && time_gap < 30', action: 'review', executionTime: 100, group: '高风险用户', channel: 'web', timeRange: '2026-06-03' },
+      { sampleId: 'sample_008', userId: 'user_1008', hit: true, hitRule: 'rule_002', hitCondition: 'location_change == true && time_gap < 30', action: 'review', executionTime: 99, group: 'VIP用户', channel: 'mobile', timeRange: '2026-06-04' }
     ],
     missDetails: [],
     ruleChain: [

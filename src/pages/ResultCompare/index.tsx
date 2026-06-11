@@ -15,7 +15,8 @@ import {
   Users,
   Target,
   AlertTriangle,
-  MessageSquare
+  MessageSquare,
+  Filter
 } from 'lucide-react';
 import { useStore } from '../../stores';
 import { resultApi, taskApi } from '../../services/api';
@@ -44,11 +45,12 @@ export default function ResultCompare() {
   const navigate = useNavigate();
   const { currentResult, setCurrentResult, comparisonData, setComparisonData, anomalyMarks, addAnomalyMark, removeAnomalyMark } = useStore();
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'hit' | 'miss' | 'chain' | 'compare'>('hit');
+  const [activeTab, setActiveTab] = useState<'hit' | 'miss' | 'suspicious' | 'chain' | 'compare'>('hit');
   const [groupDimension, setGroupDimension] = useState<'group' | 'channel' | 'timeRange'>('group');
   const [showMarkModal, setShowMarkModal] = useState(false);
   const [selectedSample, setSelectedSample] = useState<string | null>(null);
   const [markRemark, setMarkRemark] = useState('');
+  const [suspiciousFilter, setSuspiciousFilter] = useState<'all' | 'hit' | 'miss'>('all');
 
   useEffect(() => {
     if (taskId) {
@@ -121,7 +123,20 @@ export default function ResultCompare() {
   };
 
   const handleGenerateReport = () => {
-    navigate('/reports');
+    if (!currentResult || !taskId) return;
+
+    const suspiciousRemarks = anomalyMarks.map(m => `${m.sampleId}: ${m.remark}`);
+
+    setPrefillReport({
+      taskId,
+      passRate: currentResult.statistics.passRate,
+      hitCount: currentResult.statistics.hitCount,
+      missCount: currentResult.statistics.missCount,
+      suspiciousCount: anomalyMarks.length,
+      suspiciousRemarks
+    });
+
+    navigate('/reports?action=create');
   };
 
   const getMarkForSample = (sampleId: string) => {
@@ -323,6 +338,7 @@ export default function ResultCompare() {
             {[
               { key: 'hit', label: '命中明细', count: hitDetails.length, icon: CheckCircle2 },
               { key: 'miss', label: '未命中分析', count: missDetails.length, icon: XCircle },
+              { key: 'suspicious', label: '可疑样本', count: anomalyMarks.length, icon: AlertTriangle },
               { key: 'chain', label: '规则链路', count: ruleChain.length, icon: GitCompare },
               { key: 'compare', label: '版本对比', count: 0, icon: BarChart3 }
             ].map(tab => (
@@ -456,10 +472,110 @@ export default function ResultCompare() {
                     key: 'suggestion',
                     label: '改进建议',
                     render: (item) => <span className="text-sm text-slate-400">{item.suggestion}</span>
+                  },
+                  {
+                    key: 'mark',
+                    label: '标记',
+                    render: (item: any) => {
+                      const mark = getMarkForSample(item.sampleId);
+                      if (mark) {
+                        return (
+                          <div className="flex items-center space-x-2">
+                            <span className="px-2 py-1 text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded flex items-center space-x-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              <span>可疑</span>
+                            </span>
+                            <button
+                              onClick={() => handleRemoveMark(mark.id)}
+                              className="text-slate-400 hover:text-red-400 transition-colors text-xs"
+                              title="移除标记"
+                            >
+                              移除
+                            </button>
+                          </div>
+                        );
+                      }
+                      return (
+                        <button
+                          onClick={() => handleMarkSample(item.sampleId)}
+                          className="px-2 py-1 text-xs text-slate-400 hover:text-red-400 border border-slate-600 hover:border-red-500/50 rounded transition-colors"
+                        >
+                          标记可疑
+                        </button>
+                      );
+                    }
                   }
                 ]}
                 data={missDetails}
                 emptyText="暂无未命中数据"
+              />
+            </div>
+          )}
+
+          {activeTab === 'suspicious' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-2">
+                  <Filter className="w-4 h-4 text-slate-400" />
+                  <span className="text-sm text-slate-400">筛选:</span>
+                  <select
+                    value={suspiciousFilter}
+                    onChange={(e) => setSuspiciousFilter(e.target.value as any)}
+                    className="px-3 py-1.5 bg-slate-900/50 border border-slate-600 rounded-lg text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">全部</option>
+                    <option value="hit">已命中</option>
+                    <option value="miss">未命中</option>
+                  </select>
+                </div>
+                <div className="text-sm text-slate-400">
+                  共 {anomalyMarks.length} 个可疑样本
+                </div>
+              </div>
+
+              <Table
+                columns={[
+                  {
+                    key: 'sampleId',
+                    label: '样本ID',
+                    render: (mark: AnomalyMark) => <span className="font-mono text-blue-400">{mark.sampleId}</span>
+                  },
+                  {
+                    key: 'anomalyType',
+                    label: '类型',
+                    render: (mark: AnomalyMark) => (
+                      <span className="px-2 py-1 text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded">
+                        {mark.anomalyType === 'suspicious' ? '可疑' : mark.anomalyType}
+                      </span>
+                    )
+                  },
+                  {
+                    key: 'remark',
+                    label: '备注',
+                    render: (mark: AnomalyMark) => <span className="text-sm text-slate-300">{mark.remark}</span>
+                  },
+                  {
+                    key: 'markedAt',
+                    label: '标记时间',
+                    render: (mark: AnomalyMark) => (
+                      <span className="text-slate-400">{new Date(mark.markedAt).toLocaleString('zh-CN')}</span>
+                    )
+                  },
+                  {
+                    key: 'actions',
+                    label: '操作',
+                    render: (mark: AnomalyMark) => (
+                      <button
+                        onClick={() => handleRemoveMark(mark.id)}
+                        className="px-2 py-1 text-xs text-slate-400 hover:text-red-400 border border-slate-600 hover:border-red-500/50 rounded transition-colors"
+                      >
+                        移除标记
+                      </button>
+                    )
+                  }
+                ]}
+                data={anomalyMarks}
+                emptyText="暂无可疑样本"
               />
             </div>
           )}

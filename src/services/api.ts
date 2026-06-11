@@ -237,6 +237,37 @@ export const taskApi = {
 function generateMockResult(task: TrialTask): TrialResult {
   const total = task.sampleIds.length;
   const hitCount = Math.floor(total * 0.8);
+  
+  const hitDetails = task.sampleIds.slice(0, hitCount).map((sampleId, idx) => {
+    const sample = sampleList.find(s => s.id === sampleId);
+    return {
+      sampleId,
+      userId: sample?.data?.userId || `user_${1001 + idx}`,
+      hit: true,
+      hitRule: task.ruleVersionId,
+      hitCondition: 'amount > 1000',
+      action: 'allow' as const,
+      executionTime: 120 + idx * 5,
+      group: sample?.groupTag || '未分组',
+      channel: sample?.channel || 'unknown',
+      timeRange: sample?.timeRange || new Date().toISOString().split('T')[0]
+    };
+  });
+
+  const missDetails = task.sampleIds.slice(hitCount).map((sampleId, idx) => {
+    const sample = sampleList.find(s => s.id === sampleId);
+    return {
+      sampleId,
+      userId: sample?.data?.userId || `user_${1001 + hitCount + idx}`,
+      hit: false,
+      reason: 'amount <= 1000',
+      suggestion: '低于最低交易限额',
+      group: sample?.groupTag || '未分组',
+      channel: sample?.channel || 'unknown',
+      timeRange: sample?.timeRange || new Date().toISOString().split('T')[0]
+    };
+  });
+
   return {
     id: `result_${task.id}`,
     taskId: task.id,
@@ -247,22 +278,8 @@ function generateMockResult(task: TrialTask): TrialResult {
       passRate: (hitCount / total * 100),
       avgExecutionTime: 125
     },
-    hitDetails: task.sampleIds.slice(0, hitCount).map((sampleId, idx) => ({
-      sampleId,
-      userId: `user_${1001 + idx}`,
-      hit: true,
-      hitRule: task.ruleVersionId,
-      hitCondition: 'amount > 1000',
-      action: 'allow' as const,
-      executionTime: 120 + idx * 5
-    })),
-    missDetails: task.sampleIds.slice(hitCount).map((sampleId, idx) => ({
-      sampleId,
-      userId: `user_${1001 + hitCount + idx}`,
-      hit: false,
-      reason: 'amount <= 1000',
-      suggestion: '低于最低交易限额'
-    })),
+    hitDetails,
+    missDetails,
     ruleChain: [
       { nodeId: 'node_001', ruleName: '基础规则检查', status: 'passed' as const, executionTime: 15, details: '通过基础验证' },
       { nodeId: 'node_002', ruleName: '交易限额检查', status: 'passed' as const, executionTime: 45, details: '交易金额符合规则' },
