@@ -1,0 +1,463 @@
+import { useEffect, useState } from 'react';
+import {
+  FileText,
+  CheckCircle2,
+  AlertTriangle,
+  AlertCircle,
+  Clock,
+  Send,
+  Download,
+  Eye,
+  Flag,
+  Plus,
+  Filter,
+  Search
+} from 'lucide-react';
+import { useStore } from '../../stores';
+import { reportApi, recordApi } from '../../services/api';
+import type { EvaluationReport, TrialRecord } from '../../types';
+import Table from '../../components/common/Table';
+import Button from '../../components/common/Button';
+import StatCard from '../../components/common/StatCard';
+import { clsx } from 'clsx';
+
+export default function EvaluationReport() {
+  const { reports, setReports, records, setRecords } = useStore();
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'reports' | 'history'>('reports');
+  const [riskFilter, setRiskFilter] = useState<string>('all');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [reportsData, recordsData] = await Promise.all([
+        reportApi.getReports(),
+        recordApi.getRecords()
+      ]);
+      setReports(reportsData);
+      setRecords(recordsData);
+    } catch (err) {
+      console.error('加载数据失败', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getRiskBadge = (level: string) => {
+    type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
+    const styles: Record<RiskLevel, string> = {
+      low: 'bg-green-500/20 text-green-400 border-green-500/30',
+      medium: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+      high: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+      critical: 'bg-red-500/20 text-red-400 border-red-500/30'
+    };
+    const icons: Record<RiskLevel, JSX.Element> = {
+      low: <CheckCircle2 className="w-3 h-3" />,
+      medium: <AlertTriangle className="w-3 h-3" />,
+      high: <AlertCircle className="w-3 h-3" />,
+      critical: <AlertCircle className="w-3 h-3" />
+    };
+    const labels: Record<RiskLevel, string> = {
+      low: '低风险',
+      medium: '中风险',
+      high: '高风险',
+      critical: '严重风险'
+    };
+    return (
+      <span className={clsx('inline-flex items-center space-x-1.5 px-2.5 py-1 text-xs font-medium border rounded-full', styles[level as RiskLevel])}>
+        {icons[level as RiskLevel]}
+        <span>{labels[level as RiskLevel]}</span>
+      </span>
+    );
+  };
+
+  const filteredReports = reports.filter(report => {
+    return riskFilter === 'all' || report.riskLevel === riskFilter;
+  });
+
+  const reportColumns = [
+    {
+      key: 'taskId',
+      label: '关联任务',
+      render: (report: EvaluationReport) => (
+        <span className="font-mono text-blue-400">{report.taskId}</span>
+      )
+    },
+    {
+      key: 'conclusion',
+      label: '评估结论',
+      render: (report: EvaluationReport) => (
+        <div className="max-w-md">
+          <p className="text-slate-300 line-clamp-2">{report.conclusion}</p>
+        </div>
+      )
+    },
+    {
+      key: 'riskLevel',
+      label: '风险等级',
+      render: (report: EvaluationReport) => getRiskBadge(report.riskLevel)
+    },
+    {
+      key: 'suggestion',
+      label: '上线建议',
+      render: (report: EvaluationReport) => (
+        <div className="max-w-md">
+          <p className="text-slate-400 text-sm line-clamp-2">{report.suggestion}</p>
+        </div>
+      )
+    },
+    {
+      key: 'isApproved',
+      label: '审批状态',
+      render: (report: EvaluationReport) => (
+        <span className={clsx(
+          'px-2.5 py-1 text-xs font-medium rounded-full',
+          report.isApproved
+            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+            : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+        )}>
+          {report.isApproved ? '已审批' : '待审批'}
+        </span>
+      )
+    },
+    {
+      key: 'createdAt',
+      label: '创建时间',
+      render: (report: EvaluationReport) => (
+        <span className="text-slate-400">{new Date(report.createdAt).toLocaleString('zh-CN')}</span>
+      )
+    },
+    {
+      key: 'actions',
+      label: '操作',
+      render: (report: EvaluationReport) => (
+        <div className="flex items-center space-x-2">
+          <button className="p-1.5 text-slate-400 hover:text-blue-400 transition-colors" title="查看详情">
+            <Eye className="w-4 h-4" />
+          </button>
+          <button className="p-1.5 text-slate-400 hover:text-green-400 transition-colors" title="导出">
+            <Download className="w-4 h-4" />
+          </button>
+        </div>
+      )
+    }
+  ];
+
+  const recordColumns = [
+    {
+      key: 'id',
+      label: '记录ID',
+      render: (record: TrialRecord) => (
+        <span className="font-mono text-blue-400">{record.id}</span>
+      )
+    },
+    {
+      key: 'task',
+      label: '任务信息',
+      render: (record: TrialRecord) => (
+        <div>
+          <p className="text-slate-300">规则版本: {record.taskSnapshot.ruleVersionId}</p>
+          <p className="text-xs text-slate-500 mt-0.5">样本数: {record.taskSnapshot.sampleIds.length}</p>
+        </div>
+      )
+    },
+    {
+      key: 'status',
+      label: '任务状态',
+      render: (record: TrialRecord) => (
+        <span className={clsx(
+          'px-2.5 py-1 text-xs font-medium rounded-full',
+          record.taskSnapshot.status === 'completed' && 'bg-green-500/20 text-green-400',
+          record.taskSnapshot.status === 'running' && 'bg-blue-500/20 text-blue-400',
+          record.taskSnapshot.status === 'failed' && 'bg-red-500/20 text-red-400'
+        )}>
+          {record.taskSnapshot.status === 'completed' ? '已完成' :
+           record.taskSnapshot.status === 'running' ? '执行中' : '失败'}
+        </span>
+      )
+    },
+    {
+      key: 'createdAt',
+      label: '创建时间',
+      render: (record: TrialRecord) => (
+        <span className="text-slate-400">{new Date(record.createdAt).toLocaleString('zh-CN')}</span>
+      )
+    },
+    {
+      key: 'actions',
+      label: '操作',
+      render: (record: TrialRecord) => (
+        <div className="flex items-center space-x-2">
+          <button className="p-1.5 text-slate-400 hover:text-blue-400 transition-colors" title="查看详情">
+            <Eye className="w-4 h-4" />
+          </button>
+          <button className="p-1.5 text-slate-400 hover:text-purple-400 transition-colors" title="恢复此状态">
+            <Flag className="w-4 h-4" />
+          </button>
+        </div>
+      )
+    }
+  ];
+
+  const lowRiskCount = reports.filter(r => r.riskLevel === 'low').length;
+  const highRiskCount = reports.filter(r => ['high', 'critical'].includes(r.riskLevel)).length;
+  const pendingCount = reports.filter(r => !r.isApproved).length;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">评估报告</h1>
+          <p className="text-slate-400">生成评估结论，提交上线建议，查看完整试算历史</p>
+        </div>
+        <Button icon={<Plus className="w-4 h-4" />} onClick={() => setShowCreateModal(true)}>
+          新建评估
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <StatCard
+          title="评估报告总数"
+          value={reports.length}
+          icon={FileText}
+          trend={{ value: 15, isPositive: true }}
+          color="blue"
+        />
+        <StatCard
+          title="低风险报告"
+          value={lowRiskCount}
+          icon={CheckCircle2}
+          color="green"
+        />
+        <StatCard
+          title="高风险报告"
+          value={highRiskCount}
+          icon={AlertCircle}
+          color="red"
+        />
+        <StatCard
+          title="待审批"
+          value={pendingCount}
+          icon={Clock}
+          color="orange"
+        />
+      </div>
+
+      <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl overflow-hidden">
+        <div className="border-b border-slate-700">
+          <div className="flex items-center space-x-1 p-2">
+            <button
+              onClick={() => setActiveTab('reports')}
+              className={clsx(
+                'flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors',
+                activeTab === 'reports'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-700'
+              )}
+            >
+              <FileText className="w-4 h-4" />
+              <span>评估报告 ({reports.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={clsx(
+                'flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors',
+                activeTab === 'history'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-700'
+              )}
+            >
+              <Clock className="w-4 h-4" />
+              <span>试算记录 ({records.length})</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
+          {activeTab === 'reports' ? (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-4 flex-1 max-w-2xl">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="搜索报告内容..."
+                      className="w-full pl-10 pr-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Filter className="w-4 h-4 text-slate-400" />
+                    <select
+                      value={riskFilter}
+                      onChange={(e) => setRiskFilter(e.target.value)}
+                      className="px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">全部风险等级</option>
+                      <option value="low">低风险</option>
+                      <option value="medium">中风险</option>
+                      <option value="high">高风险</option>
+                      <option value="critical">严重风险</option>
+                    </select>
+                  </div>
+                </div>
+                <Button variant="secondary" icon={<Download className="w-4 h-4" />}>
+                  批量导出
+                </Button>
+              </div>
+
+              <Table
+                columns={reportColumns}
+                data={filteredReports}
+                loading={loading}
+                emptyText="暂无评估报告"
+              />
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-semibold text-white">试算记录列表</h2>
+                <p className="text-sm text-slate-400">共 {records.length} 条记录</p>
+              </div>
+
+              <Table
+                columns={recordColumns}
+                data={records}
+                loading={loading}
+                emptyText="暂无试算记录"
+              />
+            </>
+          )}
+        </div>
+      </div>
+
+      {showCreateModal && (
+        <CreateReportModal
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={() => {
+            setShowCreateModal(false);
+            loadData();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+interface CreateReportModalProps {
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function CreateReportModal({ onClose, onSuccess }: CreateReportModalProps) {
+  const [taskId, setTaskId] = useState('');
+  const [conclusion, setConclusion] = useState('');
+  const [riskLevel, setRiskLevel] = useState<'low' | 'medium' | 'high' | 'critical'>('medium');
+  const [suggestion, setSuggestion] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  const handleCreate = async () => {
+    if (!conclusion || !suggestion) {
+      alert('请填写评估结论和建议');
+      return;
+    }
+
+    try {
+      setCreating(true);
+      await reportApi.createReport({
+        taskId,
+        conclusion,
+        riskLevel,
+        suggestion
+      });
+      onSuccess();
+    } catch (err) {
+      console.error('创建报告失败', err);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <h2 className="text-xl font-bold text-white mb-6">新建评估报告</h2>
+
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">关联任务 (可选)</label>
+            <input
+              type="text"
+              value={taskId}
+              onChange={(e) => setTaskId(e.target.value)}
+              placeholder="输入任务ID或留空"
+              className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">风险等级</label>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { value: 'low', label: '低风险', color: 'green', icon: CheckCircle2 },
+                { value: 'medium', label: '中风险', color: 'yellow', icon: AlertTriangle },
+                { value: 'high', label: '高风险', color: 'orange', icon: AlertCircle },
+                { value: 'critical', label: '严重风险', color: 'red', icon: AlertCircle }
+              ].map(option => (
+                <button
+                  key={option.value}
+                  onClick={() => setRiskLevel(option.value as any)}
+                  className={clsx(
+                    'flex items-center justify-center space-x-2 px-4 py-3 rounded-lg border transition-all',
+                    riskLevel === option.value
+                      ? `bg-${option.color}-500/20 border-${option.color}-500/50 text-${option.color}-400`
+                      : 'bg-slate-800 border-slate-600 text-slate-400 hover:border-slate-500'
+                  )}
+                >
+                  <option.icon className="w-4 h-4" />
+                  <span className="text-sm font-medium">{option.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">评估结论 <span className="text-red-400">*</span></label>
+            <textarea
+              value={conclusion}
+              onChange={(e) => setConclusion(e.target.value)}
+              placeholder="详细描述规则试算的评估结论..."
+              rows={4}
+              className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">上线建议 <span className="text-red-400">*</span></label>
+            <textarea
+              value={suggestion}
+              onChange={(e) => setSuggestion(e.target.value)}
+              placeholder="提供具体的上线建议和风险缓解措施..."
+              rows={4}
+              className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end space-x-3 mt-8">
+          <Button variant="secondary" onClick={onClose}>
+            取消
+          </Button>
+          <Button onClick={handleCreate} loading={creating}>
+            创建报告
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
